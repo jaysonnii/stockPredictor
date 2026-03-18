@@ -5,7 +5,67 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Stock Predictor</title>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js">
+  // ── Watchlist ──────────────────────────────────────────────────────────────
+  function loadWatchlist() {
+    try { return JSON.parse(localStorage.getItem('watchlist') || '[]'); }
+    catch { return []; }
+  }
+
+  function saveWatchlist(list) {
+    localStorage.setItem('watchlist', JSON.stringify(list));
+  }
+
+  function renderWatchlist() {
+    const list = loadWatchlist();
+    const el = document.getElementById('wlList');
+    if (list.length === 0) {
+      el.innerHTML = '<div class="wl-empty">No stocks added yet.</div>';
+      return;
+    }
+    el.innerHTML = list.map((s, i) => `
+      <div class="wl-item" onclick="quickLook('${s.ticker}')">
+        <button class="wl-remove" onclick="event.stopPropagation(); removeFromWatchlist(${i})">✕</button>
+        <div class="wl-ticker">${s.ticker}</div>
+        <div class="wl-name">${s.name}</div>
+        <div class="wl-price">${s.price}</div>
+        <div class="wl-date">Added ${s.date}</div>
+      </div>
+    `).join('');
+  }
+
+  function addToWatchlist() {
+    const ticker = curTicker;
+    const name = document.getElementById('sName').textContent;
+    const price = document.getElementById('sPrice').textContent;
+    const date = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+    const list = loadWatchlist();
+    if (list.find(s => s.ticker === ticker)) {
+      alert(ticker + ' is already in your watchlist.');
+      return;
+    }
+    list.push({ ticker, name, price, date });
+    saveWatchlist(list);
+    renderWatchlist();
+    document.getElementById('addWatchBtn').textContent = '✓ Added';
+    document.getElementById('addWatchBtn').disabled = true;
+  }
+
+  function removeFromWatchlist(index) {
+    const list = loadWatchlist();
+    list.splice(index, 1);
+    saveWatchlist(list);
+    renderWatchlist();
+  }
+
+  // Show add button after results load
+  const origRun = run;
+
+  // Render watchlist on page load
+  renderWatchlist();
+
+</script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -18,7 +78,9 @@
     padding: 32px 20px 80px;
   }
 
-  .wrap { max-width: 760px; margin: 0 auto; }
+  .layout { display: flex; gap: 32px; max-width: 1080px; margin: 0 auto; }
+  .main { flex: 1; min-width: 0; }
+  .wrap { width: 100%; }
 
   h1 {
     font-family: monospace;
@@ -221,10 +283,115 @@
     cursor: pointer;
   }
   .pop-btn:hover { border-color: #111; }
+
+  /* Watchlist sidebar */
+  .watchlist {
+    width: 220px;
+    flex-shrink: 0;
+    position: sticky;
+    top: 32px;
+    align-self: flex-start;
+  }
+
+  .wl-header {
+    font-family: monospace;
+    font-size: 11px;
+    color: #999;
+    margin-bottom: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .wl-header span { color: #bbb; font-size: 10px; cursor: default; }
+
+  .wl-empty {
+    font-family: monospace;
+    font-size: 12px;
+    color: #ccc;
+    padding: 10px 0;
+  }
+
+  .wl-item {
+    border: 1px solid #eee;
+    padding: 10px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: border-color 0.15s;
+    position: relative;
+  }
+
+  .wl-item:hover { border-color: #aaa; }
+
+  .wl-ticker {
+    font-family: monospace;
+    font-size: 14px;
+    font-weight: 600;
+    color: #111;
+  }
+
+  .wl-name {
+    font-size: 11px;
+    color: #888;
+    margin-top: 1px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .wl-price {
+    font-family: monospace;
+    font-size: 13px;
+    color: #111;
+    margin-top: 4px;
+  }
+
+  .wl-date {
+    font-family: monospace;
+    font-size: 10px;
+    color: #bbb;
+    margin-top: 2px;
+  }
+
+  .wl-remove {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    font-size: 11px;
+    color: #ccc;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+  }
+
+  .wl-remove:hover { color: #c00; }
+
+  .add-watch-btn {
+    font-family: monospace;
+    font-size: 12px;
+    background: #fff;
+    color: #111;
+    border: 1px solid #ccc;
+    padding: 7px 14px;
+    cursor: pointer;
+    margin-top: 4px;
+    margin-bottom: 28px;
+    display: none;
+  }
+
+  .add-watch-btn:hover { border-color: #111; }
+  .add-watch-btn.visible { display: inline-block; }
+
+  @media (max-width: 780px) {
+    .layout { flex-direction: column; }
+    .watchlist { width: 100%; position: static; }
+  }
 </style>
 </head>
 <body>
-<div class="wrap">
+<div class="layout"><div class="main"><div class="wrap">
 
   <h1>stock predictor &mdash; ml price forecast</h1>
 
@@ -261,6 +428,7 @@
       <div class="stock-price" id="sPrice"></div>
     </div>
 
+    <button class="add-watch-btn" id="addWatchBtn" onclick="addToWatchlist()">+ Add to Watchlist</button>
     <div id="predRows" style="margin-bottom:28px;"></div>
 
     <div class="info-row" id="infoRow"></div>
@@ -282,7 +450,16 @@
     <div class="note">Predictions are for educational purposes only. Not financial advice.</div>
   </div>
 
+</div><!-- end .wrap -->
+</div><!-- end .main -->
+
+<!-- Watchlist sidebar -->
+<div class="watchlist">
+  <div class="wl-header">watchlist <span>saved locally</span></div>
+  <div id="wlList"><div class="wl-empty">No stocks added yet.</div></div>
 </div>
+
+</div><!-- end .layout -->
 <script>
   let chartInst = null;
   let curTicker = '';
@@ -322,9 +499,9 @@
     // Loading message cycle
     const messages = [
       'Fetching market data...',
-      'Doing something...',
-      'Working...',
-      'Almost...',
+      'Engineering features...',
+      'Training model...',
+      'Running predictions...',
       'Almost done...'
     ];
     let msgIndex = 0;
@@ -381,6 +558,10 @@
 
       document.getElementById('loading').classList.remove('show');
       document.getElementById('result').classList.add('show');
+      const addBtn = document.getElementById('addWatchBtn');
+      addBtn.classList.add('visible');
+      addBtn.textContent = '+ Add to Watchlist';
+      addBtn.disabled = false;
       loadChart('1y');
 
     } catch (err) {
@@ -451,6 +632,66 @@
       });
     } catch(e) { console.error(e); }
   }
+
+  // ── Watchlist ──────────────────────────────────────────────────────────────
+  function loadWatchlist() {
+    try { return JSON.parse(localStorage.getItem('watchlist') || '[]'); }
+    catch { return []; }
+  }
+
+  function saveWatchlist(list) {
+    localStorage.setItem('watchlist', JSON.stringify(list));
+  }
+
+  function renderWatchlist() {
+    const list = loadWatchlist();
+    const el = document.getElementById('wlList');
+    if (list.length === 0) {
+      el.innerHTML = '<div class="wl-empty">No stocks added yet.</div>';
+      return;
+    }
+    el.innerHTML = list.map((s, i) => `
+      <div class="wl-item" onclick="quickLook('${s.ticker}')">
+        <button class="wl-remove" onclick="event.stopPropagation(); removeFromWatchlist(${i})">✕</button>
+        <div class="wl-ticker">${s.ticker}</div>
+        <div class="wl-name">${s.name}</div>
+        <div class="wl-price">${s.price}</div>
+        <div class="wl-date">Added ${s.date}</div>
+      </div>
+    `).join('');
+  }
+
+  function addToWatchlist() {
+    const ticker = curTicker;
+    const name = document.getElementById('sName').textContent;
+    const price = document.getElementById('sPrice').textContent;
+    const date = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+    const list = loadWatchlist();
+    if (list.find(s => s.ticker === ticker)) {
+      alert(ticker + ' is already in your watchlist.');
+      return;
+    }
+    list.push({ ticker, name, price, date });
+    saveWatchlist(list);
+    renderWatchlist();
+    document.getElementById('addWatchBtn').textContent = '✓ Added';
+    document.getElementById('addWatchBtn').disabled = true;
+  }
+
+  function removeFromWatchlist(index) {
+    const list = loadWatchlist();
+    list.splice(index, 1);
+    saveWatchlist(list);
+    renderWatchlist();
+  }
+
+  // Show add button after results load
+  const origRun = run;
+
+  // Render watchlist on page load
+  renderWatchlist();
+
 </script>
 </body>
 </html>
