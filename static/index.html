@@ -388,6 +388,79 @@
     .layout { flex-direction: column; }
     .watchlist { width: 100%; position: static; }
   }
+
+  /* Tooltip */
+  .tip {
+    position: relative;
+    display: inline-block;
+    border-bottom: 1px dashed #aaa;
+    cursor: help;
+  }
+  .tip .tiptext {
+    display: none;
+    position: absolute;
+    bottom: 130%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #111;
+    color: #eee;
+    font-family: monospace;
+    font-size: 11px;
+    line-height: 1.5;
+    padding: 8px 10px;
+    width: 220px;
+    z-index: 99;
+    pointer-events: none;
+  }
+  .tip:hover .tiptext { display: block; }
+
+  /* Signal card */
+  .signal-card {
+    border: 1px solid #ddd;
+    padding: 14px 16px;
+    margin-bottom: 24px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .signal-badge {
+    font-family: monospace;
+    font-size: 13px;
+    font-weight: 700;
+    padding: 4px 12px;
+    border: 1px solid;
+    letter-spacing: 0.05em;
+  }
+  .signal-badge.buy  { color: #1a7f37; border-color: #1a7f37; }
+  .signal-badge.hold { color: #b08000; border-color: #b08000; }
+  .signal-badge.sell { color: #c00;    border-color: #c00; }
+  .signal-reason {
+    font-size: 12px;
+    color: #666;
+    line-height: 1.5;
+  }
+
+  /* ETF section */
+  .etf-section { margin-bottom: 24px; }
+  .etf-label {
+    font-size: 11px;
+    color: #999;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 8px;
+    font-weight: 500;
+  }
+  .etf-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .etf-chip {
+    font-family: monospace;
+    font-size: 12px;
+    background: #fff;
+    color: #111;
+    border: 1px solid #ccc;
+    padding: 4px 10px;
+    cursor: pointer;
+  }
+  .etf-chip:hover { border-color: #111; }
 </style>
 </head>
 <body>
@@ -429,7 +502,20 @@
     </div>
 
     <button class="add-watch-btn" id="addWatchBtn" onclick="addToWatchlist()">+ Add to Watchlist</button>
+
+    <!-- Signal card -->
+    <div class="signal-card" id="signalCard" style="display:none;">
+      <div class="signal-badge" id="signalBadge"></div>
+      <div class="signal-reason" id="signalReason"></div>
+    </div>
+
     <div id="predRows" style="margin-bottom:28px;"></div>
+
+    <!-- ETF section -->
+    <div class="etf-section" id="etfSection" style="display:none;">
+      <div class="etf-label">related etfs that hold this stock</div>
+      <div class="etf-chips" id="etfChips"></div>
+    </div>
 
     <div class="info-row" id="infoRow"></div>
 
@@ -537,24 +623,82 @@
       // Predictions
       const predDiv = document.getElementById('predRows');
       predDiv.innerHTML = '';
+      const predTips = {
+        '1 Month':  'Short-term estimate scaled from the 1-year model. Less reliable — treat as a rough directional signal.',
+        '6 Months': 'Medium-term estimate. More meaningful than 1 month but still uncertain.',
+        '1 Year':   'The core ML prediction. Trained on 10 years of historical data using a Random Forest model.',
+      };
       pred.predictions.forEach(p => {
         const up = p.expected_return_pct >= 0;
-        predDiv.innerHTML += `<div style="font-family:monospace;font-size:15px;margin-bottom:6px;"><span style="display:inline-block;width:90px;color:#888;">${p.horizon}:</span> ${fmt(p.predicted_price)} <span style="color:${up ? '#1a7f37' : '#c00'}">${up ? '+' : ''}${p.expected_return_pct.toFixed(2)}%</span></div>`;
+        const tip = predTips[p.horizon] || '';
+        predDiv.innerHTML += `<div style="font-family:monospace;font-size:15px;margin-bottom:6px;"><span style="display:inline-block;width:90px;color:#888;"><span class="tip">${p.horizon}<span class="tiptext">${tip}</span></span>:</span> ${fmt(p.predicted_price)} <span style="color:${up ? '#1a7f37' : '#c00'}">${up ? '+' : ''}${p.expected_return_pct.toFixed(2)}%</span></div>`;
       });
 
       // Info
       const infoRow = document.getElementById('infoRow');
       infoRow.innerHTML = '';
       if (info) {
-        [
-          { lbl: 'Market Cap', val: fmtMcap(info.market_cap) },
-          { lbl: 'P/E Ratio',  val: info.pe_ratio ? info.pe_ratio.toFixed(2) : 'N/A' },
-          { lbl: '52W High',   val: fmt(info.fifty_two_week_high) },
-          { lbl: '52W Low',    val: fmt(info.fifty_two_week_low) },
-        ].forEach(i => {
-          infoRow.innerHTML += `<div class="info-item"><div class="lbl">${i.lbl}</div><div class="val">${i.val}</div></div>`;
+        const infoItems = [
+          { lbl: 'Market Cap', val: fmtMcap(info.market_cap),
+            tip: 'Total market value of the company. Large cap (>$10B) = more stable. Small cap = higher risk/reward.' },
+          { lbl: 'P/E Ratio',  val: info.pe_ratio ? info.pe_ratio.toFixed(2) : 'N/A',
+            tip: 'Price-to-Earnings. How much you pay per $1 of profit. S&P 500 avg ~25. High P/E = growth expected or overvalued.' },
+          { lbl: '52W High',   val: fmt(info.fifty_two_week_high),
+            tip: 'Highest price in the last year. If current price is far below this, the stock has pulled back significantly.' },
+          { lbl: '52W Low',    val: fmt(info.fifty_two_week_low),
+            tip: 'Lowest price in the last year. Price near this level may signal a buying opportunity — or ongoing trouble.' },
+        ];
+        infoItems.forEach(i => {
+          infoRow.innerHTML += `<div class="info-item"><div class="lbl"><span class="tip">${i.lbl}<span class="tiptext">${i.tip}</span></span></div><div class="val">${i.val}</div></div>`;
         });
       }
+
+      // ── Signal card ──────────────────────────────────────────────────────
+      const yearPred = pred.predictions.find(p => p.horizon === '1 Year');
+      const ret = yearPred ? yearPred.expected_return_pct : 0;
+      const pe  = info ? info.pe_ratio : null;
+
+      let signal = 'HOLD';
+      let reason = '';
+
+      if (ret > 8 && (pe === null || pe < 35)) {
+        signal = 'BUY';
+        reason = `Model predicts +${ret.toFixed(1)}% over 1 year${pe ? ` with a P/E of ${pe.toFixed(1)} — reasonably valued` : ''}.`;
+      } else if (ret < -5 || (pe !== null && pe > 60)) {
+        signal = 'SELL';
+        reason = `Model predicts ${ret.toFixed(1)}% over 1 year${pe && pe > 60 ? ` and P/E of ${pe.toFixed(1)} suggests the stock may be overvalued` : ''}.`;
+      } else {
+        reason = `Model predicts +${ret.toFixed(1)}% — modest growth. ${pe ? `P/E of ${pe.toFixed(1)} is within normal range.` : ''} Monitor before acting.`;
+      }
+
+      const badge = document.getElementById('signalBadge');
+      badge.textContent = signal;
+      badge.className = 'signal-badge ' + signal.toLowerCase();
+      document.getElementById('signalReason').textContent = reason;
+      document.getElementById('signalCard').style.display = 'flex';
+
+      // ── Related ETFs ─────────────────────────────────────────────────────
+      const etfMap = {
+        'AAPL': ['QQQ','SPY','VTI','XLK','IVV'],
+        'MSFT': ['QQQ','SPY','VTI','XLK','IVV'],
+        'GOOGL':['QQQ','SPY','XLC','VTI'],
+        'AMZN': ['QQQ','SPY','XLY','VTI'],
+        'NVDA': ['QQQ','SMH','SOXX','XLK','VTI'],
+        'TSLA': ['QQQ','XLY','ARKK','VTI'],
+        'META': ['QQQ','XLC','SPY','VTI'],
+        'JPM':  ['XLF','VFH','SPY','KBE'],
+        'SPY':  ['VOO','IVV','VTI'],
+        'BRK-B':['XLF','VFH','SPY'],
+        'AMD':  ['SMH','SOXX','QQQ','XLK'],
+        'NFLX': ['QQQ','XLC','SPY'],
+        'DIS':  ['XLC','SPY','VTI'],
+      };
+      const etfs = etfMap[curTicker] || ['SPY','QQQ','VTI'];
+      const etfChips = document.getElementById('etfChips');
+      etfChips.innerHTML = etfs.map(e =>
+        `<button class="etf-chip" onclick="quickLook('${e}')">${e}</button>`
+      ).join('');
+      document.getElementById('etfSection').style.display = 'block';
 
       document.getElementById('loading').classList.remove('show');
       document.getElementById('result').classList.add('show');
