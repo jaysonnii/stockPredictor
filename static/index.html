@@ -207,6 +207,20 @@
     color: #bbb;
     margin-top: 32px;
   }
+
+  .popular { margin-bottom: 32px; }
+  .popular-label { font-family: monospace; font-size: 11px; color: #999; margin-bottom: 10px; }
+  .popular-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+  .pop-btn {
+    font-family: monospace;
+    font-size: 13px;
+    background: #fff;
+    color: #111;
+    border: 1px solid #ccc;
+    padding: 6px 12px;
+    cursor: pointer;
+  }
+  .pop-btn:hover { border-color: #111; }
 </style>
 </head>
 <body>
@@ -219,8 +233,25 @@
     <button id="btn" onclick="run()">Look up</button>
   </div>
 
+
+  <div class="popular">
+    <div class="popular-label">popular stocks</div>
+    <div class="popular-grid">
+      <button class="pop-btn" onclick="quickLook('AAPL')">AAPL — Apple</button>
+      <button class="pop-btn" onclick="quickLook('MSFT')">MSFT — Microsoft</button>
+      <button class="pop-btn" onclick="quickLook('GOOGL')">GOOGL — Alphabet</button>
+      <button class="pop-btn" onclick="quickLook('AMZN')">AMZN — Amazon</button>
+      <button class="pop-btn" onclick="quickLook('NVDA')">NVDA — Nvidia</button>
+      <button class="pop-btn" onclick="quickLook('TSLA')">TSLA — Tesla</button>
+      <button class="pop-btn" onclick="quickLook('META')">META — Meta</button>
+      <button class="pop-btn" onclick="quickLook('JPM')">JPM — JPMorgan</button>
+      <button class="pop-btn" onclick="quickLook('SPY')">SPY — S&P 500 ETF</button>
+      <button class="pop-btn" onclick="quickLook('BRK-B')">BRK-B — Berkshire</button>
+    </div>
+  </div>
+
   <div class="error" id="error"></div>
-  <div class="loading" id="loading">Loading... (first lookup trains the model, ~60s)</div>
+  <div class="loading" id="loading"><span id="loadingMsg">Fetching data...</span></div>
 
   <div class="result" id="result">
 
@@ -260,6 +291,12 @@
     if (e.key === 'Enter') run();
   });
 
+
+  function quickLook(ticker) {
+    document.getElementById('ticker').value = ticker;
+    run();
+  }
+
   function fmt(n) {
     return '$' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
@@ -282,11 +319,31 @@
     document.getElementById('loading').classList.add('show');
     document.getElementById('btn').disabled = true;
 
+    // Loading message cycle
+    const messages = [
+      'Fetching market data...',
+      'Doing something...',
+      'Working...',
+      'Almost...',
+      'Almost done...'
+    ];
+    let msgIndex = 0;
+    document.getElementById('loadingMsg').textContent = messages[0];
+    const msgInterval = setInterval(() => {
+      msgIndex = (msgIndex + 1) % messages.length;
+      document.getElementById('loadingMsg').textContent = messages[msgIndex];
+    }, 6000);
+
+    // Wait at least 30s before showing results
+    const delay = new Promise(resolve => setTimeout(resolve, 30000));
+
     try {
       const [predRes, infoRes] = await Promise.all([
         fetch(`/predict/all?ticker=${ticker}`),
-        fetch(`/info?ticker=${ticker}`)
+        fetch(`/info?ticker=${ticker}`),
+        delay
       ]);
+      clearInterval(msgInterval);
 
       if (!predRes.ok) {
         const e = await predRes.json();
@@ -327,6 +384,7 @@
       loadChart('1y');
 
     } catch (err) {
+      clearInterval(msgInterval);
       document.getElementById('loading').classList.remove('show');
       document.getElementById('error').textContent = '⚠ ' + err.message;
       document.getElementById('error').classList.add('show');
