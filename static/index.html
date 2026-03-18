@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stock Predictor</title>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #fff;
+    color: #111;
+    font-family: system-ui, sans-serif;
+    font-size: 15px;
+    line-height: 1.5;
+    padding: 32px 20px 80px;
+  }
+
+  .wrap { max-width: 760px; margin: 0 auto; }
+
+  h1 {
+    font-family: monospace;
+    font-size: 13px;
+    font-weight: 400;
+    color: #999;
+    margin-bottom: 24px;
+  }
+
+  .search { display: flex; gap: 8px; margin-bottom: 36px; }
+
+  input {
+    font-family: monospace;
+    font-size: 20px;
+    font-weight: 600;
+    color: #111;
+    background: #fff;
+    border: 1px solid #ccc;
+    border-radius: 0;
+    padding: 10px 14px;
+    width: 150px;
+    text-transform: uppercase;
+    outline: none;
+  }
+
+  input:focus { border-color: #111; }
+
+  button {
+    font-family: system-ui, sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    background: #111;
+    color: #fff;
+    border: none;
+    border-radius: 0;
+    padding: 10px 20px;
+    cursor: pointer;
+  }
+
+  button:hover { background: #333; }
+  button:disabled { background: #aaa; cursor: not-allowed; }
+
+  .error {
+    display: none;
+    font-family: monospace;
+    font-size: 13px;
+    color: #c00;
+    margin-bottom: 20px;
+  }
+  .error.show { display: block; }
+
+  .loading {
+    display: none;
+    font-family: monospace;
+    font-size: 13px;
+    color: #888;
+    margin-bottom: 20px;
+  }
+  .loading.show { display: block; }
+
+  .result { display: none; }
+  .result.show { display: block; }
+
+  /* Stock header */
+  .stock-header {
+    padding-bottom: 20px;
+    margin-bottom: 24px;
+    border-bottom: 1px solid #ddd;
+  }
+
+  .stock-name {
+    font-size: 20px;
+    font-weight: 600;
+  }
+
+  .stock-sub {
+    font-family: monospace;
+    font-size: 12px;
+    color: #888;
+    margin-top: 2px;
+  }
+
+  .stock-price {
+    font-family: monospace;
+    font-size: 30px;
+    font-weight: 600;
+    margin-top: 8px;
+  }
+
+  /* Predictions table */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: monospace;
+    font-size: 14px;
+    margin-bottom: 28px;
+  }
+
+  th {
+    text-align: left;
+    font-size: 11px;
+    font-weight: 500;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 0 16px 8px 0;
+    border-bottom: 1px solid #ddd;
+  }
+
+  td {
+    padding: 10px 16px 10px 0;
+    border-bottom: 1px solid #eee;
+  }
+
+  .up   { color: #1a7f37; }
+  .down { color: #c00; }
+
+  /* Company info */
+  .info-row {
+    display: flex;
+    gap: 28px;
+    flex-wrap: wrap;
+    padding-bottom: 24px;
+    margin-bottom: 28px;
+    border-bottom: 1px solid #ddd;
+  }
+
+  .info-item .lbl {
+    font-size: 11px;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 500;
+  }
+
+  .info-item .val {
+    font-family: monospace;
+    font-size: 14px;
+    font-weight: 500;
+    margin-top: 2px;
+  }
+
+  /* Chart */
+  .chart-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+  }
+
+  .chart-lbl {
+    font-size: 11px;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 500;
+  }
+
+  .tabs { display: flex; gap: 4px; }
+
+  .tab {
+    font-family: monospace;
+    font-size: 11px;
+    background: transparent;
+    color: #888;
+    border: 1px solid #ccc;
+    border-radius: 0;
+    padding: 3px 8px;
+    cursor: pointer;
+  }
+
+  .tab:hover { color: #111; border-color: #888; }
+  .tab.active { background: #111; color: #fff; border-color: #111; }
+
+  .chart-box {
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 0;
+    padding: 16px;
+    height: 220px;
+    position: relative;
+  }
+
+  .note {
+    font-size: 12px;
+    color: #bbb;
+    margin-top: 32px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>stock predictor &mdash; ml price forecast</h1>
+
+  <div class="search">
+    <input id="ticker" type="text" placeholder="AAPL" maxlength="6" />
+    <button id="btn" onclick="run()">Look up</button>
+  </div>
+
+  <div class="error" id="error"></div>
+  <div class="loading" id="loading">Loading... (first lookup trains the model, ~60s)</div>
+
+  <div class="result" id="result">
+
+    <div class="stock-header">
+      <div class="stock-name" id="sName"></div>
+      <div class="stock-sub" id="sSub"></div>
+      <div class="stock-price" id="sPrice"></div>
+    </div>
+
+    <div id="predRows" style="margin-bottom:28px;"></div>
+
+    <div class="info-row" id="infoRow"></div>
+
+    <div class="chart-top">
+      <div class="chart-lbl">Price History</div>
+      <div class="tabs">
+        <button class="tab" onclick="loadChart('1mo')">1M</button>
+        <button class="tab" onclick="loadChart('3mo')">3M</button>
+        <button class="tab active" onclick="loadChart('1y')">1Y</button>
+        <button class="tab" onclick="loadChart('2y')">2Y</button>
+        <button class="tab" onclick="loadChart('5y')">5Y</button>
+      </div>
+    </div>
+    <div class="chart-box">
+      <canvas id="chart"></canvas>
+    </div>
+
+    <div class="note">Predictions are for educational purposes only. Not financial advice.</div>
+  </div>
+
+</div>
+<script>
+  let chartInst = null;
+  let curTicker = '';
+
+  document.getElementById('ticker').addEventListener('keydown', e => {
+    if (e.key === 'Enter') run();
+  });
+
+  function fmt(n) {
+    return '$' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  function fmtMcap(n) {
+    if (!n) return 'N/A';
+    if (n >= 1e12) return '$' + (n/1e12).toFixed(2) + 'T';
+    if (n >= 1e9)  return '$' + (n/1e9).toFixed(2) + 'B';
+    if (n >= 1e6)  return '$' + (n/1e6).toFixed(2) + 'M';
+    return '$' + n.toLocaleString();
+  }
+
+  async function run() {
+    const ticker = document.getElementById('ticker').value.trim().toUpperCase();
+    if (!ticker) return;
+    curTicker = ticker;
+
+    document.getElementById('error').classList.remove('show');
+    document.getElementById('result').classList.remove('show');
+    document.getElementById('loading').classList.add('show');
+    document.getElementById('btn').disabled = true;
+
+    try {
+      const [predRes, infoRes] = await Promise.all([
+        fetch(`/predict/all?ticker=${ticker}`),
+        fetch(`/info?ticker=${ticker}`)
+      ]);
+
+      if (!predRes.ok) {
+        const e = await predRes.json();
+        throw new Error(e.detail || 'Prediction failed');
+      }
+
+      const pred = await predRes.json();
+      const info = infoRes.ok ? await infoRes.json() : null;
+
+      document.getElementById('sName').textContent = info ? info.company_name : ticker;
+      document.getElementById('sSub').textContent = [ticker, info?.sector, info?.industry].filter(Boolean).join(' · ');
+      document.getElementById('sPrice').textContent = fmt(pred.current_price);
+
+      // Predictions
+      const predDiv = document.getElementById('predRows');
+      predDiv.innerHTML = '';
+      pred.predictions.forEach(p => {
+        const up = p.expected_return_pct >= 0;
+        predDiv.innerHTML += `<div style="font-family:monospace;font-size:15px;margin-bottom:6px;"><span style="display:inline-block;width:90px;color:#888;">${p.horizon}:</span> ${fmt(p.predicted_price)} <span style="color:${up ? '#1a7f37' : '#c00'}">${up ? '+' : ''}${p.expected_return_pct.toFixed(2)}%</span></div>`;
+      });
+
+      // Info
+      const infoRow = document.getElementById('infoRow');
+      infoRow.innerHTML = '';
+      if (info) {
+        [
+          { lbl: 'Market Cap', val: fmtMcap(info.market_cap) },
+          { lbl: 'P/E Ratio',  val: info.pe_ratio ? info.pe_ratio.toFixed(2) : 'N/A' },
+          { lbl: '52W High',   val: fmt(info.fifty_two_week_high) },
+          { lbl: '52W Low',    val: fmt(info.fifty_two_week_low) },
+        ].forEach(i => {
+          infoRow.innerHTML += `<div class="info-item"><div class="lbl">${i.lbl}</div><div class="val">${i.val}</div></div>`;
+        });
+      }
+
+      document.getElementById('loading').classList.remove('show');
+      document.getElementById('result').classList.add('show');
+      loadChart('1y');
+
+    } catch (err) {
+      document.getElementById('loading').classList.remove('show');
+      document.getElementById('error').textContent = '⚠ ' + err.message;
+      document.getElementById('error').classList.add('show');
+    }
+
+    document.getElementById('btn').disabled = false;
+  }
+
+  async function loadChart(period) {
+    if (!curTicker) return;
+    document.querySelectorAll('.tab').forEach(t =>
+      t.classList.toggle('active', t.textContent === period.replace('mo','M').replace('y','Y'))
+    );
+    try {
+      const res = await fetch(`/history?ticker=${curTicker}&period=${period}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      if (chartInst) chartInst.destroy();
+      const ctx = document.getElementById('chart').getContext('2d');
+      chartInst = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: data.dates,
+          datasets: [{
+            data: data.prices,
+            borderColor: '#4a9eff',
+            borderWidth: 1.5,
+            backgroundColor: 'rgba(74,158,255,0.08)',
+            fill: true,
+            pointRadius: 0,
+            tension: 0.2,
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: '#111',
+              borderColor: '#333',
+              borderWidth: 1,
+              titleColor: '#666',
+              bodyColor: '#fff',
+              titleFont: { family: 'IBM Plex Mono', size: 11 },
+              bodyFont: { family: 'IBM Plex Mono', size: 13, weight: '600' },
+              callbacks: { label: item => ' $' + Number(item.raw).toFixed(2) }
+            }
+          },
+          scales: {
+            x: {
+              grid: { display: false },
+              ticks: { color: '#aaa', font: { family: 'IBM Plex Mono', size: 10 }, maxTicksLimit: 6 },
+              border: { display: false }
+            },
+            y: {
+              position: 'right',
+              grid: { display: false },
+              ticks: { color: '#aaa', font: { family: 'IBM Plex Mono', size: 10 }, callback: v => '$' + v.toFixed(0) },
+              border: { display: false }
+            }
+          }
+        }
+      });
+    } catch(e) { console.error(e); }
+  }
+</script>
+</body>
+</html>
