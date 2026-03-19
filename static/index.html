@@ -65,6 +65,94 @@
   // Render watchlist on page load
   renderWatchlist();
 
+
+  function showTab(name) {
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.main-tab').forEach(t => t.classList.remove('active'));
+    document.getElementById('tab-' + name).classList.add('active');
+    document.querySelectorAll('.main-tab').forEach(t => {
+      if (t.textContent.toLowerCase() === name) t.classList.add('active');
+    });
+  }
+
+  function renderValuation(info, currentPrice) {
+    if (!info || !info.pe_ratio) return;
+    const pe = info.pe_ratio;
+    // Estimate EPS from current price and P/E
+    const eps = currentPrice / pe;
+    const growthRate = 10; // assumed 10% growth
+    const intrinsic = eps * (8.5 + 2 * growthRate);
+    const diff = ((currentPrice - intrinsic) / intrinsic) * 100;
+    const isOver = currentPrice > intrinsic;
+
+    const rows = [
+      { lbl: 'Current Price',    num: fmt(currentPrice) },
+      { lbl: 'Est. EPS',         num: '$' + eps.toFixed(2) },
+      { lbl: 'Assumed Growth',   num: growthRate + '%/yr' },
+      { lbl: 'Graham Intrinsic Value', num: fmt(intrinsic) },
+      { lbl: 'Difference',       num: (isOver ? '+' : '') + diff.toFixed(1) + '%' },
+    ];
+
+    const explanations = {
+      'Current Price': { short: 'The price of one share right now on the stock market.', full: '' },
+      'Est. EPS': {
+        short: 'Earnings Per Share — how much profit the company made per share last year.',
+        full: `<strong>EPS = Total Company Profit ÷ Shares Outstanding</strong><br><br>
+          Calculated here as: <code>Current Price ÷ P/E Ratio = EPS</code><br><br>
+          Example: $${currentPrice.toFixed(2)} ÷ ${pe.toFixed(2)} = $${eps.toFixed(2)} per share earned<br><br>
+          <strong>Rising EPS</strong> = company getting more profitable ✓<br>
+          <strong>Falling EPS</strong> = profits shrinking, investigate why<br>
+          <strong>Negative EPS</strong> = company losing money, high risk`
+      },
+      'Assumed Growth': {
+        short: 'The annual earnings growth rate used in the Graham formula.',
+        full: `The Benjamin Graham formula assumes <strong>10% annual growth</strong> as a baseline for an average healthy company.<br><br>
+          High-growth tech companies (NVDA, META) often grow faster — meaning their fair value could be higher.<br>
+          Slow-growth companies (utilities, banks) may grow less — meaning 10% is generous.`
+      },
+      'Graham Intrinsic Value': {
+        short: "An estimate of what the stock is truly worth based on earnings and growth.",
+        full: `<strong>Formula: EPS × (8.5 + 2 × growth rate)</strong><br><br>
+          8.5 = Benjamin Graham's base P/E for a company with zero growth<br>
+          2 × growth rate = premium added for expected earnings growth<br><br>
+          If current price is <strong>below</strong> this value → potentially undervalued ✓<br>
+          If current price is <strong>above</strong> this value → you may be paying a premium`
+      },
+      'Difference': {
+        short: 'How far the current price is from the estimated fair value.',
+        full: `<strong>Negative %</strong> = stock is trading <em>below</em> fair value (potentially a good buy)<br>
+          <strong>Positive %</strong> = stock is trading <em>above</em> fair value (you're paying a premium)<br><br>
+          Note: This is one signal only. Always cross-check with P/E ratio, recent earnings, and market conditions.`
+      },
+    };
+
+    document.getElementById('valRows').innerHTML = rows.map(r => {
+      const exp = explanations[r.lbl];
+      if (!exp) return `<div class="val-row"><span class="lbl">${r.lbl}</span><span class="num">${r.num}</span></div>`;
+      const id = 'exp-' + r.lbl.replace(/[^a-z]/gi, '');
+      return `
+        <div class="val-row">
+          <span class="lbl">
+            <span class="etip" onclick="toggleExp('${id}')">
+              ${r.lbl} <span class="etip-icon">[+]</span>
+            </span>
+          </span>
+          <span class="num">${r.num}</span>
+        </div>
+        <div class="etip-box" id="${id}">${exp.full || exp.short}</div>`;
+    }).join('');
+
+    const verdict = document.getElementById('valVerdict');
+    if (isOver) {
+      verdict.className = 'val-verdict over';
+      verdict.textContent = `Trading ${Math.abs(diff).toFixed(1)}% above estimated fair value. You may be paying a premium. This is normal for high-growth companies.`;
+    } else {
+      verdict.className = 'val-verdict under';
+      verdict.textContent = `Trading ${Math.abs(diff).toFixed(1)}% below estimated fair value. The stock may be undervalued based on current earnings.`;
+    }
+    document.getElementById('valBox').style.display = 'block';
+  }
+
 </script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -461,6 +549,203 @@
     cursor: pointer;
   }
   .etf-chip:hover { border-color: #111; }
+
+  /* Main nav tabs */
+  .main-tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid #ddd;
+    margin-bottom: 28px;
+  }
+  .main-tab {
+    font-family: monospace;
+    font-size: 12px;
+    background: transparent;
+    color: #888;
+    border: none;
+    border-bottom: 2px solid transparent;
+    padding: 8px 16px 8px 0;
+    cursor: pointer;
+    margin-bottom: -1px;
+  }
+  .main-tab:hover { color: #111; }
+  .main-tab.active { color: #111; border-bottom: 2px solid #111; font-weight: 600; }
+
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  /* Valuation box */
+  .val-box {
+    border: 1px solid #ddd;
+    padding: 16px;
+    margin-bottom: 24px;
+    font-family: monospace;
+    font-size: 13px;
+  }
+  .val-title {
+    font-size: 11px;
+    color: #999;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 12px;
+    font-family: system-ui, sans-serif;
+    font-weight: 500;
+  }
+  .val-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 0;
+    border-bottom: 1px solid #f0f0f0;
+  }
+  .val-row:last-child { border-bottom: none; }
+  .val-row .lbl { color: #666; }
+  .val-row .num { font-weight: 600; }
+  .val-verdict {
+    margin-top: 12px;
+    padding: 8px 10px;
+    font-size: 12px;
+    font-family: system-ui, sans-serif;
+    color: #444;
+    background: #f9f9f9;
+    border-left: 3px solid #ccc;
+  }
+  .val-verdict.under { border-left-color: #1a7f37; }
+  .val-verdict.over  { border-left-color: #c00; }
+
+  /* Learn tab */
+  .learn-section {
+    margin-bottom: 36px;
+  }
+  .learn-section h3 {
+    font-size: 14px;
+    font-weight: 600;
+    color: #111;
+    margin-bottom: 14px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #eee;
+  }
+  .learn-section p {
+    font-size: 14px;
+    color: #444;
+    line-height: 1.7;
+    margin-bottom: 10px;
+  }
+  .learn-section ul {
+    padding-left: 18px;
+    margin-bottom: 10px;
+  }
+  .learn-section ul li {
+    font-size: 14px;
+    color: #444;
+    line-height: 1.7;
+    margin-bottom: 4px;
+  }
+  .ratio-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+  .ratio-card {
+    border: 1px solid #eee;
+    padding: 12px;
+  }
+  .ratio-card .name {
+    font-family: monospace;
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+  .ratio-card .def {
+    font-size: 12px;
+    color: #666;
+    line-height: 1.5;
+  }
+  .ratio-card .rule {
+    font-size: 11px;
+    color: #888;
+    margin-top: 6px;
+    font-style: italic;
+  }
+  .checklist { list-style: none; padding: 0; }
+  .checklist li {
+    font-size: 14px;
+    color: #444;
+    padding: 7px 0;
+    border-bottom: 1px solid #f0f0f0;
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+  }
+  .checklist li:last-child { border-bottom: none; }
+  .checklist li::before {
+    content: '□';
+    font-family: monospace;
+    color: #bbb;
+    flex-shrink: 0;
+  }
+  .formula-box {
+    background: #f9f9f9;
+    border: 1px solid #eee;
+    padding: 12px 14px;
+    font-family: monospace;
+    font-size: 13px;
+    color: #333;
+    margin: 10px 0;
+    line-height: 1.8;
+  }
+
+  .hl {
+    background: #fff9c4;
+    padding: 1px 3px;
+    font-weight: 600;
+    color: #111;
+  }
+  .must-know {
+    background: #fff9c4;
+    border-left: 3px solid #f0c000;
+    padding: 10px 14px;
+    margin: 10px 0;
+    font-size: 13px;
+    color: #333;
+    line-height: 1.6;
+  }
+  .must-know strong { color: #111; }
+
+  /* Expandable tooltips */
+  .etip {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    cursor: pointer;
+    border-bottom: 1px dashed #aaa;
+  }
+  .etip-icon {
+    font-size: 10px;
+    color: #aaa;
+    font-family: monospace;
+  }
+  .etip-box {
+    display: none;
+    background: #f9f9f9;
+    border: 1px solid #ddd;
+    border-left: 3px solid #f0c000;
+    padding: 10px 12px;
+    font-size: 12px;
+    color: #444;
+    line-height: 1.6;
+    margin-top: 6px;
+    margin-bottom: 6px;
+    font-family: system-ui, sans-serif;
+  }
+  .etip-box.open { display: block; }
+  .etip-box strong { color: #111; }
+  .etip-box code {
+    background: #eee;
+    padding: 1px 4px;
+    font-family: monospace;
+    font-size: 11px;
+  }
 </style>
 </head>
 <body>
@@ -503,35 +788,144 @@
 
     <button class="add-watch-btn" id="addWatchBtn" onclick="addToWatchlist()">+ Add to Watchlist</button>
 
-    <!-- Signal card -->
-    <div class="signal-card" id="signalCard" style="display:none;">
-      <div class="signal-badge" id="signalBadge"></div>
-      <div class="signal-reason" id="signalReason"></div>
+    <!-- Main nav tabs -->
+    <div class="main-tabs">
+      <button class="main-tab active" onclick="showTab('overview')">Overview</button>
+      <button class="main-tab" onclick="showTab('learn')">Learn</button>
     </div>
 
-    <div id="predRows" style="margin-bottom:28px;"></div>
+    <!-- OVERVIEW TAB -->
+    <div class="tab-panel active" id="tab-overview">
 
-    <!-- ETF section -->
-    <div class="etf-section" id="etfSection" style="display:none;">
-      <div class="etf-label">related etfs that hold this stock</div>
-      <div class="etf-chips" id="etfChips"></div>
-    </div>
-
-    <div class="info-row" id="infoRow"></div>
-
-    <div class="chart-top">
-      <div class="chart-lbl">Price History</div>
-      <div class="tabs">
-        <button class="tab" onclick="loadChart('1mo')">1M</button>
-        <button class="tab" onclick="loadChart('3mo')">3M</button>
-        <button class="tab active" onclick="loadChart('1y')">1Y</button>
-        <button class="tab" onclick="loadChart('2y')">2Y</button>
-        <button class="tab" onclick="loadChart('5y')">5Y</button>
+      <!-- Signal card -->
+      <div class="signal-card" id="signalCard" style="display:none;">
+        <div class="signal-badge" id="signalBadge"></div>
+        <div class="signal-reason" id="signalReason"></div>
       </div>
-    </div>
-    <div class="chart-box">
-      <canvas id="chart"></canvas>
-    </div>
+
+      <div id="predRows" style="margin-bottom:28px;"></div>
+
+      <!-- Valuation box -->
+      <div class="val-box" id="valBox" style="display:none;">
+        <div class="val-title">Valuation estimate</div>
+        <div id="valRows"></div>
+        <div class="val-verdict" id="valVerdict"></div>
+      </div>
+
+      <!-- ETF section -->
+      <div class="etf-section" id="etfSection" style="display:none;">
+        <div class="etf-label">related etfs that hold this stock</div>
+        <div class="etf-chips" id="etfChips"></div>
+      </div>
+
+      <div class="info-row" id="infoRow"></div>
+
+      <div class="chart-top">
+        <div class="chart-lbl">Price History</div>
+        <div class="tabs">
+          <button class="tab" onclick="loadChart('1mo')">1M</button>
+          <button class="tab" onclick="loadChart('3mo')">3M</button>
+          <button class="tab active" onclick="loadChart('1y')">1Y</button>
+          <button class="tab" onclick="loadChart('2y')">2Y</button>
+          <button class="tab" onclick="loadChart('5y')">5Y</button>
+        </div>
+      </div>
+      <div class="chart-box">
+        <canvas id="chart"></canvas>
+      </div>
+
+    </div><!-- end overview tab -->
+
+    <!-- LEARN TAB -->
+    <div class="tab-panel" id="tab-learn">
+
+      <!-- Intrinsic value explanation -->
+      <div class="learn-section">
+        <h3>How to tell if a stock is overvalued or undervalued</h3>
+        <p>The most common beginner method is the <strong>Benjamin Graham formula</strong> — a simple way to estimate what a stock is <em>actually worth</em> based on its earnings, then compare that to the current price.</p>
+        <div class="formula-box">
+          Intrinsic Value = EPS × (8.5 + 2 × growth rate)<br>
+          <br>
+          EPS = Earnings Per Share (how much profit per share)<br>
+          8.5 = Graham's base P/E for a no-growth company<br>
+          growth rate = expected annual earnings growth (%)
+        </div>
+        <p>If the intrinsic value is <strong>higher</strong> than the current price → the stock may be <strong>undervalued</strong> (potentially a good buy).</p>
+        <p>If the intrinsic value is <strong>lower</strong> than the current price → the stock may be <strong>overvalued</strong> (you're paying a premium).</p>
+        <p>Your app calculates this automatically on the Overview tab using the stock's current EPS and a 10% assumed growth rate.</p>
+      </div>
+
+      <!-- How to read a chart -->
+      <div class="learn-section">
+        <h3>How to read a price chart</h3>
+        <p>A price chart shows you how a stock's value has moved over time. Here's what to look for:</p>
+        <ul>
+          <li><strong>Trend direction</strong> — is the line going up (bullish), down (bearish), or sideways (consolidating)? Buying into an uptrend is generally safer.</li>
+          <li><strong>Support level</strong> — a price the stock keeps bouncing off from below. If it holds, that's a potential buying zone.</li>
+          <li><strong>Resistance level</strong> — a price the stock keeps failing to break above. If it breaks through, that's a bullish signal.</li>
+          <li><strong>Sharp drops</strong> — sudden dips can be buying opportunities OR warning signs. Check the news to find out why.</li>
+          <li><strong>52-week range</strong> — if the stock is near its 52W low, it's pulled back a lot. Near its 52W high means it's been on a run.</li>
+          <li><strong>Zoom out</strong> — always look at the 1Y and 5Y charts, not just 1M. Short-term noise can look scary but be meaningless long-term.</li>
+        </ul>
+      </div>
+
+      <!-- Key ratios -->
+      <div class="learn-section">
+        <h3>Key ratios explained</h3>
+        <div class="ratio-grid">
+          <div class="ratio-card">
+            <div class="name">P/E Ratio</div>
+            <div class="def">Price-to-Earnings. How much you're paying for every $1 of the company's profit.</div>
+            <div class="rule">S&P 500 avg ~25. Under 15 = cheap. Over 40 = expensive or high-growth expected.</div>
+          </div>
+          <div class="ratio-card">
+            <div class="name">EPS</div>
+            <div class="def">Earnings Per Share. The company's profit divided by number of shares. Higher = more profitable.</div>
+            <div class="rule">Rising EPS over time is a good sign. Negative EPS means the company is losing money.</div>
+          </div>
+          <div class="ratio-card">
+            <div class="name">Market Cap</div>
+            <div class="def">Total value of all shares combined. Tells you the size of the company.</div>
+            <div class="rule">Large cap >$10B = stable. Mid cap $2–10B = growth potential. Small cap &lt;$2B = higher risk.</div>
+          </div>
+          <div class="ratio-card">
+            <div class="name">52W High / Low</div>
+            <div class="def">The highest and lowest price the stock hit in the past year.</div>
+            <div class="rule">Near the low can mean buying opportunity. Near the high means momentum — but could reverse.</div>
+          </div>
+          <div class="ratio-card">
+            <div class="name">Volume</div>
+            <div class="def">How many shares were traded that day. High volume = strong conviction behind a move.</div>
+            <div class="rule">A price rise on high volume is more meaningful than on low volume.</div>
+          </div>
+          <div class="ratio-card">
+            <div class="name">Dividend Yield</div>
+            <div class="def">Annual dividend payment as a % of the stock price. Passive income from holding shares.</div>
+            <div class="rule">2–4% is typical. Very high yields (>7%) can signal a struggling company.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Beginner checklist -->
+      <div class="learn-section">
+        <h3>Beginner stock buying checklist</h3>
+        <p>Before buying any stock, ask yourself these questions:</p>
+        <ul class="checklist">
+          <li>Do I understand what this company actually does and how it makes money?</li>
+          <li>Is the P/E ratio reasonable compared to the industry average?</li>
+          <li>Has revenue and EPS been growing over the past 3–5 years?</li>
+          <li>Is the stock near a 52-week low (potential value) or near all-time highs (paying a premium)?</li>
+          <li>What is the overall market trend? Buying in a bear market is riskier.</li>
+          <li>Does the company have significant debt? (Debt-to-equity ratio)</li>
+          <li>Would I be comfortable holding this for 3–5 years if it dropped 30%?</li>
+          <li>Am I investing money I don't need in the next 1–2 years?</li>
+          <li>Have I read recent news or earnings reports about this company?</li>
+          <li>Is this a single stock bet or part of a diversified portfolio?</li>
+        </ul>
+        <p style="margin-top:12px; color:#888; font-size:12px;">If you can't answer most of these confidently, consider an ETF like SPY or QQQ first to build exposure while you learn.</p>
+      </div>
+
+    </div><!-- end learn tab -->
 
     <div class="note">Predictions are for educational purposes only. Not financial advice.</div>
   </div>
@@ -597,14 +991,11 @@
       document.getElementById('loadingMsg').textContent = messages[msgIndex];
     }, 6000);
 
-    // Wait at least 30s before showing results
-    const delay = new Promise(resolve => setTimeout(resolve, 30000));
 
     try {
       const [predRes, infoRes] = await Promise.all([
         fetch(`/predict/all?ticker=${ticker}`),
-        fetch(`/info?ticker=${ticker}`),
-        delay
+        fetch(`/info?ticker=${ticker}`)
       ]);
       clearInterval(msgInterval);
 
@@ -623,15 +1014,38 @@
       // Predictions
       const predDiv = document.getElementById('predRows');
       predDiv.innerHTML = '';
-      const predTips = {
-        '1 Month':  'Short-term estimate scaled from the 1-year model. Less reliable — treat as a rough directional signal.',
-        '6 Months': 'Medium-term estimate. More meaningful than 1 month but still uncertain.',
-        '1 Year':   'The core ML prediction. Trained on 10 years of historical data using a Random Forest model.',
+      const predDetails = {
+        '1 Month': {
+          short: 'Short-term estimate scaled from the 1-year model.',
+          full: `This is <strong>not a separate model</strong> — it's the 1-year prediction scaled down proportionally.<br><br>
+            Formula: <code>1-year return ÷ 12</code><br><br>
+            Short-term stock movement is largely unpredictable even for professionals. Use this as a rough directional signal only, not a specific price target.`
+        },
+        '6 Months': {
+          short: 'Medium-term estimate scaled from the 1-year model.',
+          full: `Scaled as <code>1-year return ÷ 2</code>.<br><br>
+            More meaningful than 1-month but still uncertain. Good for understanding the general trend direction the model sees.`
+        },
+        '1 Year': {
+          short: 'The core ML prediction trained on 10 years of historical data.',
+          full: `Built using a <strong>Random Forest Regressor</strong> trained on 10 years of daily price data.<br><br>
+            Features used: Moving averages (20/50/200 day), RSI, MACD, volatility, volume, lag prices.<br><br>
+            <strong>Directional accuracy: ~54%</strong> — slightly better than a coin flip. Use as one signal among many, not a guarantee.`
+        },
       };
-      pred.predictions.forEach(p => {
+      pred.predictions.forEach((p, idx) => {
         const up = p.expected_return_pct >= 0;
-        const tip = predTips[p.horizon] || '';
-        predDiv.innerHTML += `<div style="font-family:monospace;font-size:15px;margin-bottom:6px;"><span style="display:inline-block;width:90px;color:#888;"><span class="tip">${p.horizon}<span class="tiptext">${tip}</span></span>:</span> ${fmt(p.predicted_price)} <span style="color:${up ? '#1a7f37' : '#c00'}">${up ? '+' : ''}${p.expected_return_pct.toFixed(2)}%</span></div>`;
+        const det = predDetails[p.horizon] || {};
+        const eid = 'expPred' + idx;
+        predDiv.innerHTML += `
+          <div style="font-family:monospace;font-size:15px;margin-bottom:4px;">
+            <span style="display:inline-block;width:90px;color:#888;">
+              <span class="etip" onclick="toggleExp('${eid}')">${p.horizon} <span class="etip-icon">[+]</span></span>:
+            </span>
+            ${fmt(p.predicted_price)}
+            <span style="color:${up ? '#1a7f37' : '#c00'}">${up ? '+' : ''}${p.expected_return_pct.toFixed(2)}%</span>
+          </div>
+          <div class="etip-box" id="${eid}" style="font-family:system-ui,sans-serif;">${det.full || det.short || ''}</div>`;
       });
 
       // Info
@@ -639,17 +1053,49 @@
       infoRow.innerHTML = '';
       if (info) {
         const infoItems = [
-          { lbl: 'Market Cap', val: fmtMcap(info.market_cap),
-            tip: 'Total market value of the company. Large cap (>$10B) = more stable. Small cap = higher risk/reward.' },
-          { lbl: 'P/E Ratio',  val: info.pe_ratio ? info.pe_ratio.toFixed(2) : 'N/A',
-            tip: 'Price-to-Earnings. How much you pay per $1 of profit. S&P 500 avg ~25. High P/E = growth expected or overvalued.' },
-          { lbl: '52W High',   val: fmt(info.fifty_two_week_high),
-            tip: 'Highest price in the last year. If current price is far below this, the stock has pulled back significantly.' },
-          { lbl: '52W Low',    val: fmt(info.fifty_two_week_low),
-            tip: 'Lowest price in the last year. Price near this level may signal a buying opportunity — or ongoing trouble.' },
+          { lbl: 'Market Cap', val: fmtMcap(info.market_cap), id: 'expMcap',
+            short: 'Total value of all shares combined.',
+            full: `<strong>Market Cap = Share Price × Total Shares</strong><br><br>
+              <strong>Large cap</strong> >$10B = established, stable companies (Apple, Microsoft)<br>
+              <strong>Mid cap</strong> $2–10B = growth potential, moderate risk<br>
+              <strong>Small cap</strong> &lt;$2B = higher growth potential but higher risk<br><br>
+              Bigger is not always better — many small caps have outperformed giants.` },
+          { lbl: 'P/E Ratio',  val: info.pe_ratio ? info.pe_ratio.toFixed(2) : 'N/A', id: 'expPE',
+            short: 'Price-to-Earnings. How much you pay per $1 of company profit.',
+            full: `<strong>P/E = Current Price ÷ Earnings Per Share</strong><br><br>
+              Think of it as: how many years of current earnings are you paying for?<br><br>
+              <strong>Under 15</strong> = potentially cheap<br>
+              <strong>15–25</strong> = fair value range (S&P 500 avg ~25)<br>
+              <strong>25–40</strong> = growth premium being paid<br>
+              <strong>Over 40</strong> = very expensive, high growth expected<br>
+              <strong>Negative</strong> = company is losing money<br><br>
+              Always compare P/E to other companies in the same industry.` },
+          { lbl: '52W High',   val: fmt(info.fifty_two_week_high), id: 'exp52H',
+            short: 'Highest price this stock traded at in the past 52 weeks.',
+            full: `If the current price is <strong>far below the 52W high</strong>, the stock has pulled back significantly.<br><br>
+              This could mean:<br>
+              • A buying opportunity if the company is still fundamentally strong<br>
+              • A warning sign if the drop was caused by bad earnings or news<br><br>
+              Always find out <em>why</em> a stock dropped before buying the dip.` },
+          { lbl: '52W Low',    val: fmt(info.fifty_two_week_low), id: 'exp52L',
+            short: 'Lowest price this stock traded at in the past 52 weeks.',
+            full: `If the current price is <strong>near the 52W low</strong>, the stock is at a historically cheap level.<br><br>
+              This could mean:<br>
+              • Undervalued — a great entry point for a strong company<br>
+              • A value trap — the company may be in real trouble<br><br>
+              Check: Is revenue still growing? Did they have recent bad earnings? Is the whole sector down?` },
         ];
         infoItems.forEach(i => {
-          infoRow.innerHTML += `<div class="info-item"><div class="lbl"><span class="tip">${i.lbl}<span class="tiptext">${i.tip}</span></span></div><div class="val">${i.val}</div></div>`;
+          infoRow.innerHTML += `
+            <div class="info-item">
+              <div class="lbl">
+                <span class="etip" onclick="toggleExp('${i.id}')">
+                  ${i.lbl} <span class="etip-icon">[+]</span>
+                </span>
+              </div>
+              <div class="val">${i.val}</div>
+              <div class="etip-box" id="${i.id}">${i.full}</div>
+            </div>`;
         });
       }
 
@@ -699,6 +1145,7 @@
         `<button class="etf-chip" onclick="quickLook('${e}')">${e}</button>`
       ).join('');
       document.getElementById('etfSection').style.display = 'block';
+      renderValuation(info, pred.current_price);
 
       document.getElementById('loading').classList.remove('show');
       document.getElementById('result').classList.add('show');
@@ -836,6 +1283,110 @@
   // Render watchlist on page load
   renderWatchlist();
 
+
+  function showTab(name) {
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.main-tab').forEach(t => t.classList.remove('active'));
+    document.getElementById('tab-' + name).classList.add('active');
+    document.querySelectorAll('.main-tab').forEach(t => {
+      if (t.textContent.toLowerCase() === name) t.classList.add('active');
+    });
+  }
+
+  function renderValuation(info, currentPrice) {
+    if (!info || !info.pe_ratio) return;
+    const pe = info.pe_ratio;
+    // Estimate EPS from current price and P/E
+    const eps = currentPrice / pe;
+    const growthRate = 10; // assumed 10% growth
+    const intrinsic = eps * (8.5 + 2 * growthRate);
+    const diff = ((currentPrice - intrinsic) / intrinsic) * 100;
+    const isOver = currentPrice > intrinsic;
+
+    const rows = [
+      { lbl: 'Current Price',    num: fmt(currentPrice) },
+      { lbl: 'Est. EPS',         num: '$' + eps.toFixed(2) },
+      { lbl: 'Assumed Growth',   num: growthRate + '%/yr' },
+      { lbl: 'Graham Intrinsic Value', num: fmt(intrinsic) },
+      { lbl: 'Difference',       num: (isOver ? '+' : '') + diff.toFixed(1) + '%' },
+    ];
+
+    const explanations = {
+      'Current Price': { short: 'The price of one share right now on the stock market.', full: '' },
+      'Est. EPS': {
+        short: 'Earnings Per Share — how much profit the company made per share last year.',
+        full: `<strong>EPS = Total Company Profit ÷ Shares Outstanding</strong><br><br>
+          Calculated here as: <code>Current Price ÷ P/E Ratio = EPS</code><br><br>
+          Example: $${currentPrice.toFixed(2)} ÷ ${pe.toFixed(2)} = $${eps.toFixed(2)} per share earned<br><br>
+          <strong>Rising EPS</strong> = company getting more profitable ✓<br>
+          <strong>Falling EPS</strong> = profits shrinking, investigate why<br>
+          <strong>Negative EPS</strong> = company losing money, high risk`
+      },
+      'Assumed Growth': {
+        short: 'The annual earnings growth rate used in the Graham formula.',
+        full: `The Benjamin Graham formula assumes <strong>10% annual growth</strong> as a baseline for an average healthy company.<br><br>
+          High-growth tech companies (NVDA, META) often grow faster — meaning their fair value could be higher.<br>
+          Slow-growth companies (utilities, banks) may grow less — meaning 10% is generous.`
+      },
+      'Graham Intrinsic Value': {
+        short: "An estimate of what the stock is truly worth based on earnings and growth.",
+        full: `<strong>Formula: EPS × (8.5 + 2 × growth rate)</strong><br><br>
+          8.5 = Benjamin Graham's base P/E for a company with zero growth<br>
+          2 × growth rate = premium added for expected earnings growth<br><br>
+          If current price is <strong>below</strong> this value → potentially undervalued ✓<br>
+          If current price is <strong>above</strong> this value → you may be paying a premium`
+      },
+      'Difference': {
+        short: 'How far the current price is from the estimated fair value.',
+        full: `<strong>Negative %</strong> = stock is trading <em>below</em> fair value (potentially a good buy)<br>
+          <strong>Positive %</strong> = stock is trading <em>above</em> fair value (you're paying a premium)<br><br>
+          Note: This is one signal only. Always cross-check with P/E ratio, recent earnings, and market conditions.`
+      },
+    };
+
+    document.getElementById('valRows').innerHTML = rows.map(r => {
+      const exp = explanations[r.lbl];
+      if (!exp) return `<div class="val-row"><span class="lbl">${r.lbl}</span><span class="num">${r.num}</span></div>`;
+      const id = 'exp-' + r.lbl.replace(/[^a-z]/gi, '');
+      return `
+        <div class="val-row">
+          <span class="lbl">
+            <span class="etip" onclick="toggleExp('${id}')">
+              ${r.lbl} <span class="etip-icon">[+]</span>
+            </span>
+          </span>
+          <span class="num">${r.num}</span>
+        </div>
+        <div class="etip-box" id="${id}">${exp.full || exp.short}</div>`;
+    }).join('');
+
+    const verdict = document.getElementById('valVerdict');
+    if (isOver) {
+      verdict.className = 'val-verdict over';
+      verdict.textContent = `Trading ${Math.abs(diff).toFixed(1)}% above estimated fair value. You may be paying a premium. This is normal for high-growth companies.`;
+    } else {
+      verdict.className = 'val-verdict under';
+      verdict.textContent = `Trading ${Math.abs(diff).toFixed(1)}% below estimated fair value. The stock may be undervalued based on current earnings.`;
+    }
+    document.getElementById('valBox').style.display = 'block';
+  }
+
+
+  function toggleExp(id) {
+    const box = document.getElementById(id);
+    if (!box) return;
+    box.classList.toggle('open');
+    // update the [+]/[-] icon inside the clicked etip
+    const allEtips = document.querySelectorAll('.etip');
+    allEtips.forEach(el => {
+      const icon = el.querySelector('.etip-icon');
+      if (!icon) return;
+      const eid = el.getAttribute('onclick').match(/'([^']+)'/);
+      if (eid && eid[1] === id) {
+        icon.textContent = box.classList.contains('open') ? '[-]' : '[+]';
+      }
+    });
+  }
 </script>
 </body>
 </html>
